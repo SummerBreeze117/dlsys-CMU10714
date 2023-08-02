@@ -170,8 +170,9 @@ class BatchNorm1d(Module):
             var = (((x - mean.broadcast_to(x.shape)) ** 2).sum(axes=(0,)) / x.shape[0]).reshape((1, x.shape[1]))
             # BatchNorm uses the running(training) estimates of mean and variance when testing
             # instead of batch statistics at test time
-            self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean
-            self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var
+            # NOTE: for saved params in running time, you should use .data/detach() to avoid OOM
+            self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean.data
+            self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var.data
             x_normalized = (x - mean.broadcast_to(x.shape)) / (var.broadcast_to(x.shape) + self.eps) ** 0.5
             return self.weight.broadcast_to(x.shape) * x_normalized + self.bias.broadcast_to(x.shape)
         else:
