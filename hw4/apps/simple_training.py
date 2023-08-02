@@ -5,12 +5,13 @@ import needle.nn as nn
 from needle import backend_ndarray as nd
 from models import *
 import time
+from tqdm import tqdm 
 
 device = ndl.cpu()
 
 ### CIFAR-10 training ###
 
-def epoch_general_cifar10(dataloader, model, loss_fn=nn.SoftmaxLoss(), opt=None):
+def epoch_general_cifar10(dataloader, model, loss_fn=nn.SoftmaxLoss(), opt=None, params_set=None):
     """
     Iterates over the dataloader. If optimizer is not None, sets the
     model to train mode, and for each batch updates the model parameters.
@@ -34,7 +35,7 @@ def epoch_general_cifar10(dataloader, model, loss_fn=nn.SoftmaxLoss(), opt=None)
         model.train()
     else:
         model.eval()
-    for X, y in dataloader:
+    for X, y in tqdm(dataloader):
         if opt:
             opt.reset_grad()
         pred = model(X)
@@ -47,6 +48,7 @@ def epoch_general_cifar10(dataloader, model, loss_fn=nn.SoftmaxLoss(), opt=None)
         n_step += 1
         n_samplers += X.shape[0]
 
+    print(correct / n_samplers, loss_sum / n_step)
     return correct / n_samplers, loss_sum / n_step
     ### END YOUR SOLUTION
 
@@ -55,7 +57,8 @@ def train_cifar10(model, dataloader, n_epochs=1, optimizer=ndl.optim.Adam,
           lr=0.001, weight_decay=0.001, loss_fn=nn.SoftmaxLoss):
     np.random.seed(4)
     ### BEGIN YOUR SOLUTION
-    opt = optimizer(model.parameters(), lr=lr, weight_decay=weight_decay)
+    params = model.parameters()
+    opt = optimizer(params, lr=lr, weight_decay=weight_decay)
     for _ in range(n_epochs):
         train_acc, train_loss = epoch_general_cifar10(dataloader, model, loss_fn=loss_fn(), opt=opt)
         # print(train_acc, train_loss)
@@ -78,6 +81,7 @@ def evaluate_cifar10(model, dataloader, loss_fn=nn.SoftmaxLoss):
     """
     np.random.seed(4)
     ### BEGIN YOUR SOLUTION
+    print("---------------eval----------------")
     return epoch_general_cifar10(dataloader, model, loss_fn())
     ### END YOUR SOLUTION
 
@@ -195,21 +199,13 @@ def evaluate_ptb(model, data, seq_len=40, loss_fn=nn.SoftmaxLoss,
 if __name__ == "__main__":
     ### For testing purposes
     device = ndl.cpu()
-    #dataset = ndl.data.CIFAR10Dataset("./data/cifar-10-batches-py", train=True)
-    #dataloader = ndl.data.DataLoader(\
-    #         dataset=dataset,
-    #         batch_size=128,
-    #         shuffle=True
-    #         )
-    #
-    #model = ResNet9(device=device, dtype="float32")
-    #train_cifar10(model, dataloader, n_epochs=10, optimizer=ndl.optim.Adam,
-    #      lr=0.001, weight_decay=0.001)
-
-    corpus = ndl.data.Corpus("./data/ptb")
-    seq_len = 40
-    batch_size = 16
-    hidden_size = 100
-    train_data = ndl.data.batchify(corpus.train, batch_size, device=device, dtype="float32")
-    model = LanguageModel(1, len(corpus.dictionary), hidden_size, num_layers=2, device=device)
-    train_ptb(model, train_data, seq_len, n_epochs=10, device=device)
+    dataset = ndl.data.CIFAR10Dataset("./data/cifar-10-batches-py", train=True)
+    dataloader = ndl.data.DataLoader(\
+            dataset=dataset,
+            batch_size=128,
+            shuffle=True
+            )
+    
+    model = ResNet9(device=device, dtype="float32")
+    train_cifar10(model, dataloader, n_epochs=10, optimizer=ndl.optim.Adam,
+         lr=0.001, weight_decay=0.001)

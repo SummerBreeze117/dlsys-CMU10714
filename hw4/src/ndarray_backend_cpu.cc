@@ -26,7 +26,7 @@ struct AlignedArray {
     if (ret != 0) throw std::bad_alloc();
     this->size = size;
   }
-  ~AlignedArray() { free(ptr); }
+  ~AlignedArray() { free(ptr);}
   size_t ptr_as_int() {return (size_t)ptr; }
   scalar_t* ptr;
   size_t size;

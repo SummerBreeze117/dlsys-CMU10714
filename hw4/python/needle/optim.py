@@ -5,6 +5,7 @@ import needle as ndl
 class Optimizer:
     def __init__(self, params):
         self.params = params
+        # self.params_set = set(params)
 
     def step(self):
         raise NotImplementedError()

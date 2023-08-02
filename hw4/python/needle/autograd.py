@@ -3,6 +3,7 @@ import needle
 from typing import List, Optional, NamedTuple, Tuple, Union
 from collections import namedtuple
 import numpy
+import time
 from needle import init
 
 # needle version
@@ -109,6 +110,8 @@ class Value:
     def __del__(self):
         global TENSOR_COUNTER
         TENSOR_COUNTER -= 1
+        # time.sleep(0.5)
+        # print("release value", TENSOR_COUNTER)
 
     def _init(
         self,
