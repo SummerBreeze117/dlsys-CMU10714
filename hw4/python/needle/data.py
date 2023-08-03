@@ -104,8 +104,8 @@ class DataLoader:
     def __init__(
         self,
         dataset: Dataset,
-        device,
-        dtype,
+        device=None,
+        dtype="float32",
         batch_size: Optional[int] = 1,
         shuffle: bool = False,
     ):

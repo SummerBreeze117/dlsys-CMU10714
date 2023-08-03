@@ -10,6 +10,7 @@ namespace needle {
 namespace cuda {
 
 #define BASE_THREAD_NUM 256
+#define BLOCK_SIZE 16
 
 #define TILE 4
 typedef float scalar_t;
@@ -46,10 +47,10 @@ CudaDims CudaOneDim(size_t size) {
 #define MAX_VEC_SIZE 8
 struct CudaVec {
   uint32_t size;
-  uint32_t data[MAX_VEC_SIZE];
+  int32_t data[MAX_VEC_SIZE];
 };
 
-CudaVec VecToCuda(const std::vector<uint32_t>& x) {
+CudaVec VecToCuda(const std::vector<int32_t>& x) {
   CudaVec shape;
   if (x.size() > MAX_VEC_SIZE) throw std::runtime_error("Exceeded CUDA supported max dimesions");
   shape.size = x.size();
@@ -100,7 +101,7 @@ __global__ void CompactKernel(const scalar_t* a, scalar_t* out, size_t size, Cud
 
   /// BEGIN YOUR SOLUTION
   if (gid < size) {
-    uint32_t base = 1, pos = 0;
+    int32_t base = 1, pos = 0;
     // fixme: do not use '/' and '%'
     for (int j = shape.size - 1; j >= 0; j --) {
       pos += ((gid / base) % shape.data[j]) * strides.data[j];
@@ -111,8 +112,8 @@ __global__ void CompactKernel(const scalar_t* a, scalar_t* out, size_t size, Cud
   /// END YOUR SOLUTION
 }
 
-void Compact(const CudaArray& a, CudaArray* out, std::vector<uint32_t> shape,
-             std::vector<uint32_t> strides, size_t offset) {
+void Compact(const CudaArray& a, CudaArray* out, std::vector<int32_t> shape,
+             std::vector<int32_t> strides, size_t offset) {
   /**
    * Compact an array in memory.  Unlike the C++ version, in CUDA this will primarily call the 
    * relevant CUDA kernel.  In this case, we illustrate how you should set this up (i.e., we give 
@@ -140,7 +141,7 @@ __global__ void EwiseSetitemKernel(const scalar_t* a, scalar_t* out, size_t size
   size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (gid < size) {
-    uint32_t base = 1, pos = 0;
+    int32_t base = 1, pos = 0;
     // fixme: do not use '/' and '%'
     for (int j = shape.size - 1; j >= 0; j --) {
       pos += ((gid / base) % shape.data[j]) * strides.data[j];
@@ -151,8 +152,8 @@ __global__ void EwiseSetitemKernel(const scalar_t* a, scalar_t* out, size_t size
 }
 
 
-void EwiseSetitem(const CudaArray& a, CudaArray* out, std::vector<uint32_t> shape,
-                  std::vector<uint32_t> strides, size_t offset) {
+void EwiseSetitem(const CudaArray& a, CudaArray* out, std::vector<int32_t> shape,
+                  std::vector<int32_t> strides, size_t offset) {
   /**
    * Set items in a (non-compact) array using CUDA.  Yyou will most likely want to implement a
    * EwiseSetitemKernel() function, similar to those above, that will do the actual work.
@@ -176,7 +177,7 @@ __global__ void ScalarSetitemKernel(scalar_t val, scalar_t* out, size_t size, Cu
   size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (gid < size) {
-    uint32_t base = 1, pos = 0;
+    int32_t base = 1, pos = 0;
     // fixme: do not use '/' and '%'
     for (int j = shape.size - 1; j >= 0; j --) {
       pos += ((gid / base) % shape.data[j]) * strides.data[j];
@@ -187,8 +188,8 @@ __global__ void ScalarSetitemKernel(scalar_t val, scalar_t* out, size_t size, Cu
 }
 
 
-void ScalarSetitem(size_t size, scalar_t val, CudaArray* out, std::vector<uint32_t> shape,
-                   std::vector<uint32_t> strides, size_t offset) {
+void ScalarSetitem(size_t size, scalar_t val, CudaArray* out, std::vector<int32_t> shape,
+                   std::vector<int32_t> strides, size_t offset) {
   /**
    * Set items is a (non-compact) array
    * 
@@ -414,21 +415,60 @@ void EwiseTanh(const CudaArray& a, CudaArray* out) {
 // Elementwise and scalar operations
 ////////////////////////////////////////////////////////////////////////////////
 
-__global__ void MatmulKernel(const scalar_t* a, const scalar_t* b, scalar_t* out, uint32_t M, uint32_t N,
-            uint32_t P) {
-  size_t x = blockIdx.x * blockDim.x + threadIdx.x;
-  size_t y = blockIdx.y * blockDim.y + threadIdx.y;
-  if (x < M && y < P) {
-    scalar_t sum = 0.0;
-    for (size_t k = 0; k < N; k ++) {
-      sum += a[x * N + k] * b[k * P + y];
+__global__ void MatmulKernel(const scalar_t* a, const scalar_t* b, scalar_t* out, int M, int N,
+            int32_t P) {
+  int x = blockIdx.x * blockDim.x + threadIdx.x;
+  int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+  // simple version
+  // if (x < M && y < P) {
+  //   scalar_t sum = 0.0;
+  //   for (size_t k = 0; k < N; k ++) {
+  //     sum += a[x * N + k] * b[k * P + y];
+  //   }
+  //   out[x * P + y] = sum;
+  // }
+
+  __shared__ scalar_t sub_a[BLOCK_SIZE][BLOCK_SIZE];
+  __shared__ scalar_t sub_b[BLOCK_SIZE][BLOCK_SIZE];
+
+  scalar_t sum = 0.0;
+  for (int step = 0; step < ((N + BLOCK_SIZE - 1) / BLOCK_SIZE); step ++) {
+    int x_for_sub_a = x;
+    int y_for_sub_a = step * BLOCK_SIZE + threadIdx.y;
+    if (x_for_sub_a < M && y_for_sub_a < N) {
+      sub_a[threadIdx.x][threadIdx.y] = a[x_for_sub_a * N + y_for_sub_a];
     }
-    out[x * P + y] = sum;
+    else {
+      sub_a[threadIdx.x][threadIdx.y] = 0.0;
+    }
+
+    int x_for_sub_b = step * BLOCK_SIZE + threadIdx.x;
+    int y_for_sub_b = y;
+    if (x_for_sub_b < N && y_for_sub_b < P) {
+      sub_b[threadIdx.x][threadIdx.y] = b[x_for_sub_b * P + y_for_sub_b];
+    }
+    else {
+      sub_b[threadIdx.x][threadIdx.y] = 0.0;
+    }
+
+    __syncthreads();
+
+    for (int i = 0; i < BLOCK_SIZE; i ++) {
+      sum += sub_a[threadIdx.x][i] * sub_b[i][threadIdx.y];
+    }
+
+    __syncthreads();
+    
+  }
+
+  if (x < M && y < P) {
+      out[x * P + y] = sum;
   }
 }
 
-void Matmul(const CudaArray& a, const CudaArray& b, CudaArray* out, uint32_t M, uint32_t N,
-            uint32_t P) {
+void Matmul(const CudaArray& a, const CudaArray& b, CudaArray* out, int M, int N,
+            int P) {
   /**
    * Multiply two (compact) matrices into an output (also comapct) matrix.  You will want to look
    * at the lecture and notes on GPU-based linear algebra to see how to do this.  Since ultimately
@@ -452,7 +492,6 @@ void Matmul(const CudaArray& a, const CudaArray& b, CudaArray* out, uint32_t M, 
    */
 
   /// BEGIN YOUR SOLUTION
-  static const size_t BLOCK_SIZE = 16;
   CudaDims dim;
   size_t num_blocks_x = (M + BLOCK_SIZE - 1) / BLOCK_SIZE;
   size_t num_blocks_y = (P + BLOCK_SIZE - 1) / BLOCK_SIZE;
