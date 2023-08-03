@@ -13,8 +13,11 @@ Tensor从均匀分布 $U(-bound, bound)$中采样，其中
 `kaiming_normal(fan_in, fan_out, nonlinearity="relu", **kwargs)`
 
 Tensor从高斯分布 $N(0, std^2)$中采样，其中
+
 $$std = \frac{\text{gain}}{\sqrt{\text{fan}_{in}}}$$
-`ReLU` 的推荐使用缩放因子：$gain=\sqrt{2}$
+
+`ReLU` 的推荐使用缩放因子：
+$gain=\sqrt{2}$
 
 - `fan_in` - 输入维度
 - `fan_out` - 输出维度
@@ -25,9 +28,19 @@ $$std = \frac{\text{gain}}{\sqrt{\text{fan}_{in}}}$$
 
 `needle.nn.Linear(in_features, out_features, bias=True, device=None, dtype="float32")`
 
-对于输入数据进行线性变换: $y = xA^T + b$. 输入形状是 $(N, H_{in})$. 其中 $H_{in}=\text{in\_features}$. 输出形状是$(N, H_{out})$，其中$H_{out}=\text{out\_features}$. $N$是批次数据个数
+对于输入数据进行线性变换: 
+$y = xA^T + b$. 
+输入形状是 
+$(N, H_{in})$. 
+其中 
+$H_{in}=\text{in features}$. 
+输出形状是
+$(N, H_{out})$，
+其中
+$H_{out}=\text{out features}$
+$N$是批次数据个数
 
-> 注意使用broadcast的显式调用来修饰偏置项的形状，也就是从$(1, out\_features)$到$(N, out\_features)$. Needle不支持broadcast的隐式调用.
+> 注意使用broadcast的显式调用来修饰偏置项的形状，也就是从(1, out\_features)到(N, out\_features). Needle不支持broadcast的隐式调用.
 > 你需要先初始化权重项，再初始化偏置项
 
 Parameters
@@ -37,7 +50,7 @@ Parameters
 Variables
 - `weight` - the learnable weights of shape (`in_features`, `out_features`). The values should be initialized with the Kaiming Uniform initialization with `fan_in = in_features`
 - `bias` - the learnable bias of shape (`out_features`). The values should be initialized with the Kaiming Uniform initialize with `fan_in = out_features`. 
-**注意这里我们要得到$(1, out\_features)$的bias向量，但是只有$fan\_in$才能作为初始化参数，所以我们要通过初始化$(out\_features,1)$的方式并且加上转置操作来得到目标向量。**
+**注意这里我们要得到(1, out\_features)的bias向量，但是只有fan\_in才能作为初始化参数，所以我们要通过初始化(out\_features,1)的方式并且加上转置操作来得到目标向量。**
 ```python
 self.bias = Parameter(init.kaiming_uniform(out_features, 1).transpose()) if bias else None
 ```
